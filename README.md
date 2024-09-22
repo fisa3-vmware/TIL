@@ -29,7 +29,6 @@ On-premise 환경에서 가장 많이 사용되는 솔루션인 VMWare vShpere�
 # 🛠 목차
 - 주제 선정 이유 및 HA 개념설명
   - 고가용성을 보장하지 못한 사례
-  - 서비스 지속성
   - vSphere HA
 - HA 작동 원리 및 장애 대응 방식
   - Primary Host 선정 및 Secondary Host 역할
@@ -49,4 +48,50 @@ On-premise 환경에서 가장 많이 사용되는 솔루션인 VMWare vShpere�
 <br>
 
 ## 🥾 주제 선정 이유 및 HA 개념설명
-### 1. 고가용성을 보장하지 못한 사례
+### 고가용성을 보장하지 못한 사례
+![2024-09-22 17 40 43](https://github.com/user-attachments/assets/f30c8fa0-cae1-436a-9693-183e30e7dd27)
+- DR센터를 따로 두지 않아 신속한 복구가 어려웠다.
+### vSphere HA
+![2024-09-22 18 08 59](https://github.com/user-attachments/assets/2993f17d-b7d5-4921-a76e-e45e33f7d9ed)
+
+- vSphere HA는 하나의 호스트가 죽으면 해당 호스트의 VM을 다른 Host에 failover 하여 고가용성을 보장
+## 🎯 HA 작동 원리 및 장애 대응 방식
+### Primary Host 선정 및 Secondary Host 역할
+![2024-09-22 18 11 25](https://github.com/user-attachments/assets/28c135a3-17db-4b6f-b04e-fdf1ff70990b)
+- vSphere를 통해 host를 cluster로 묶게되면 FDA 에이전트가 설치된다.
+    - FDA 에이전트는 Primary host를 선출할 때 데이터스토어를 가장 많이 가진 host를 후보군으로 둔다.
+- primary host는 secondary host를 계속 모니터링하며 vCenter와 통신한다.
+    - host가 죽게되면 primary host는 이를 감지하여 다른 host에 VM을 failover 시킨다.
+    - 만약에 primary host가 죽으면 데이터스토어 개수를 기반으로 primary host를 다시 선출한다.
+### 네트워크 격리, 파티셔닝, 응답옵션
+![2024-09-22 18 20 02](https://github.com/user-attachments/assets/13aeae30-7e57-4cc4-9470-186897692065)
+- 각 호스트들은 Management Network를 통해 Network Heartbeat를 주고받는다.
+    - 만약에 외부와 클러스터 내부 모두 네트워크 통신이 끊긴다면 네트워크 격리 상태가된다.
+       - 대표적으로 NIC 카드장애, HOST down이 원인
+    - 특정 호스트끼리는 통신이 가능하지만 나머지 내부 클러스터간에 통신이 안된다면 네트워크 파티셔닝 상태다.
+       - 대표적으로 잘못된 네트워크 설정, 잘못된 방화벽 설정이 원인
+![2024-09-22 18 25 28](https://github.com/user-attachments/assets/19f2a86c-4781-4f97-b7da-28fe1401835c)
+- 네트워크 격리 또는 파티셔닝 상태가 됐을 때 vSphere에서 응답옵션을 선택할 수 있다.
+    - Power off 옵션은 호스트를 강제종료하여 다른 host로 VM을 failover 한다.
+    - Shutdown 옵션은 호스트를 정상종료 시키고 다른 host로 VM을 failover 한다.
+
+### NIC 카드 이중화
+![2024-09-22 18 29 06](https://github.com/user-attachments/assets/1fa36c7d-deba-49e3-8acd-7def049b7210)
+
+- 네트워크 격리, 파티셔닝 상황을 방지하고자 Management network를 NIC 이중화를 통해 고가용성을 강화한다.
+
+### 데이터스토어 하트비트
+![2024-09-22 18 30 07](https://github.com/user-attachments/assets/698bdcf5-cd76-4662-a4ff-040678206a50)
+- 네트워크 하트비트를 주고받을 수 없는 상태일 때 데이터스토어 하트비트를 통해 해당 호스트의 네트워크가 격리 또는 파티셔닝 상태가 되었는지 확인할 수 있다.
+    - 데이터스토어 하트비트는 스토리지 내부에 존재하는 LUN 이라는 논리적인 공간내에 생성된 데이터스토어에 IO를 보내 Host의 동작여부를 확인한다.
+        - 다만 LUN은 NFS에서는 지원하지 않으며 VMFS만 지원한다.
+### 스플릿 브레인 현상 대응
+![2024-09-22 18 34 29](https://github.com/user-attachments/assets/02ad7b75-1620-489c-8b53-a3294787b819)
+- 스플릿 브레인이란 네트워크 격리, 파티셔닝 응답옵션이 설정되어 있지 않았을 경우 vSphere는 해당 호스트를 종료하지 않고 다른 Host에 VM을 failover 한다
+    - 때문에 네트워크가 분리, 파티셔닝된 host에도 VM이 살아있고 failover된 host에도 VM이 살아 있는 상황이 발생한다.
+    - 같은 VM이 다른 host에 똑같이 올라간 이 상태를 두뇌가 분리된 것 같다해서 스플릿 브레인 현상이라고 부른다.
+- 스플릿 브레인 현상을 해결하기 위해서 VMCP를 사용할 수 있다.
+    - 같은 데이터스토어에 Lock을 가지지 않은 Host가 데이터스토어에 접근한다면 해당 host를 종료시킴으로써 스플릿 브레인 현상을 해결할 수 있다.
+
+
+
