@@ -26,6 +26,9 @@ On-premise 환경에서 가장 많이 사용되는 솔루션인 VMWare vShpere�
 - 발표력 향상
 <br>
 
+# 🥇수상
+![IMG_8622](https://github.com/user-attachments/assets/a6848ba2-cbf6-4c52-b534-95ca4fb58ff1)
+
 # 🛠 목차
 - 주제 선정 이유 및 HA 개념설명
   - 고가용성을 보장하지 못한 사례
@@ -36,6 +39,7 @@ On-premise 환경에서 가장 많이 사용되는 솔루션인 VMWare vShpere�
   - NIC 카드 이중화
   - 데이터스토어 하트비트
   - 스플릿 브레인 현상 대응
+  - PDL, APD 현상대응
 - HA 설정 및 최적화 방법
   - Priority 
   - Admission Controll
@@ -100,6 +104,60 @@ On-premise 환경에서 가장 많이 사용되는 솔루션인 VMWare vShpere�
 - APD : 스토리지와 통신할 수 있는 스토리지 네트워크가 모두 다운된 상황
     - 복구될 가능성이 있기 때문에 보수적인 접근(일정시간 대기하다가 failover)
     - 상황에 따라 즉각적인 failover 옵션도 사용가능
+## 🦏 HA 설정 및 최적화 방법
+### 🚤 Priority 
+![2024-09-23 15 57 19](https://github.com/user-attachments/assets/99c1ef9a-399c-437f-9587-0097594b3878)
+- 클러스터 레벨에서 VM이 올라갈 때의 default 우선순위를 정한다.
+### 🚄  Admission Control
+![2024-09-23 18 39 22](https://github.com/user-attachments/assets/34c5679c-acd1-4b0b-8459-768bdea8111e)
 
+- Percentage AdmissionControl
+    - 클러스터의 자원을 일정비율 예약해두어 호스트가 죽었을 때 예약해둔 자원으로 VM을 정상적으로 failover할 수 있도록 보장하는 옵션
+    - 일정비율을 예약해두어 사용하기 때문에 대규모 클러스터에 적합한 방식이다.
+- Slot AdmissionControl
+    - 가장 큰 VM의 리소스를 기준으로 슬롯을 만든다. 해당 슬롯 1개당 VM을 할당 할 수 있다.
+        - 예를들어서 가장 큰 VM이 CPU 2GHz, Memory 2G라면 1슬롯당 2GHz, 2G를 할당할 수 있다.
+        - 관리하기가 쉬운 대신에 다이나믹한 워크로드에는 적합하지 않다.
+- Dedicated AdmissionControl
+     - 하나의 호스트에 VM을 올리지 않고 순수히 VM의 failover를 보장하기 위해 사용하는 방식이다.
+### 🚩 데이터스토어 하트비트 정책
+![2024-09-23 18 50 31](https://github.com/user-attachments/assets/05f4b70d-9ef0-4bf3-afb8-3a9d720becf8)
+- **Automatically select datastore accessible from the host**
+     - vSphere가 자동으로 데이터스토어를 지정해주는 옵션
 
+- **Use datastores only from specified list**
+     - 사용자가 고성능 스토리지(SSD)와 같은 스토리지를 통한 데이터스토어 하트비트를 사용하고 싶을 때 임의로 스토리지 리스트를 지정해줄 수 있다.
 
+- **Use datastores form the specified list and complement automatically if needed**
+     - 사용자가 지정한 스토리지가 장애가 났을 때 vSphere가 다른 스토리지의 데이터스토어를 자동으로 설정해준다.
+
+### 🔔 Advancd Setting
+![2024-09-23 18 55 47](https://github.com/user-attachments/assets/f71832d1-655e-4200-b698-50677a8e0de0)
+- **das.isolationaddress1**
+     - host가 network heartbeat를 보내지 못할 때 네트워크 격리 또는 분리상태가 된다.
+         - 이는 management network에서 신호를 주고받는데 managerment network의 gateway가 문제가 생겼을 땐 모든 host가 네트워크 격리 상태가 된다.
+         - 이를 방지하기 위해서 임의로 gateway ip 이외에 신뢰할 수 있는 ip를 추가로 등록하여 네트워크 격리 상태를 감지하는 기준을 확장한다.
+- **das.usedefaultisolationaddress**
+     - 위의 옵션을 사용할 것인지 사용하지 않을 것인지 결정하는 옵션이다.
+
+# 🦄 결론 및 고찰
+### 🚐 대규모 인프라 서비스로 전환
+![2024-09-23 19 09 31](https://github.com/user-attachments/assets/318586a5-be0e-4cd1-b88e-9f468e35224a)
+
+### 워크로드에 따른 Admission Controll 정책설정
+![2024-09-23 19 01 46](https://github.com/user-attachments/assets/ebb4365a-7f75-4ca1-b412-a183a4a3073c)
+- 쿠폰이벤트, 수강신청 처럼 일시적으로 큰 리소스를 VM에 할당해야 한다면 AdmissionContol을 동적인 워크로드에 적합한 Percentage 전략을 사용해야한다.
+     - Slot 전략을 사용하게되면 일시적으로 크게 늘린 VM의 리소스만큼 Slot의 크기가 결정된다.
+
+### vSphere Cluster 기능 적극적으로 활용하기
+![2024-09-23 19 03 51](https://github.com/user-attachments/assets/d075b3ba-62de-4707-a288-4fd775c80c14)
+- vSphere Cluster에서 제공하는 HA, DRS, FT, vMotion 등을 적극적으로 활용해야한다.
+     - DRS를 사용하여 비대해진 클러스터의 각 호스트의 자원에 적합하도록 VM을 분배시켜야 한다.
+     - FT를 사용하여 다운타임을 허용하지 않는 서비스의 고가용성을 보장한다.
+     - vMotion을 사용하여 사용자에게 무중단 서비스를 제공하면서 유지보수를 진행한다.
+
+### 3Tier 구조에서 HCI로 전환하기
+![2024-09-23 19 06 02](https://github.com/user-attachments/assets/4479f581-1db8-4b73-82f7-bf7c56026f15)
+- 서버, 스토리지 스위치, 스토리지 3단계로 분리되어 있는 아키텍처를 HCI로 변경하여 서버증설의 비용을 줄인다.
+     - vSan, vSphere, NSX를 사용하여 스토리지, 서버, 네트워크를 가상화하여 관리한다.
+     - 다만 레거시 환경의 통합과 비용이 더 들 수 있으므로 장점과 단점을 잘 고려하여 도입해야한다.
